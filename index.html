@@ -96,6 +96,9 @@
         const transcriptBox = document.getElementById('transcriptBox');
         const transcriptText = document.getElementById('transcriptText');
         const micRipple = document.getElementById('micRipple');
+        
+        // 全域 Audio 物件，用來避免同時播放多個聲音
+        let currentAudio = null;
 
         // -------------------------------------------------------------------
         // 2. 翻譯邏輯 (使用 Google Translate 公開 API，免 Key 免 VPN)
@@ -155,6 +158,11 @@
                 micBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
                 micBtn.classList.add('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
                 micRipple.classList.add('animate-[ping_1.5s_cubic-bezier(0,0,0.2,1)_infinite]', 'opacity-75');
+                
+                // 如果正在播放聲音，按麥克風時自動停止播放
+                if (currentAudio) {
+                    currentAudio.pause();
+                }
             };
 
             recognition.onresult = function(event) {
@@ -204,56 +212,35 @@
         });
 
         // -------------------------------------------------------------------
-        // 4. 文字轉語音 (Text to Speech) 設定
+        // 4. 文字轉語音 (Text to Speech) - 使用 HTML5 Audio 解決耳機播放問題
         // -------------------------------------------------------------------
         function speakText(elementId, langCode) {
             const textToSpeak = document.getElementById(elementId).innerText;
             if (!textToSpeak || textToSpeak.includes("翻譯中") || textToSpeak.includes("等待翻譯")) return;
 
-            if ('speechSynthesis' in window) {
-                // 停止目前的朗讀
-                window.speechSynthesis.cancel();
-                
-                const utterance = new SpeechSynthesisUtterance(textToSpeak);
-                utterance.lang = langCode; // 指定語言標籤
-                utterance.rate = 0.9;      // 稍微放慢語速讓發音更清楚
-                
-                // 【修復 Bug】手動從系統中尋找並強制綁定對應的語音包
-                // 否則某些手機/瀏覽器會無視 lang 標籤，直接用預設的普通話來唸
-                const voices = window.speechSynthesis.getVoices();
-                if (voices.length > 0) {
-                    let targetVoice = null;
-                    
-                    if (langCode === 'zh-HK') {
-                        // 嚴格尋找粵語/香港的專屬聲音
-                        targetVoice = voices.find(v => v.lang === 'zh-HK' || v.lang === 'zh_HK' || v.name.toLowerCase().includes('cantonese') || v.name.includes('香港') || v.name.includes('粵語'));
-                    } else if (langCode === 'ja-JP') {
-                        // 尋找日語的專屬聲音
-                        targetVoice = voices.find(v => v.lang === 'ja-JP' || v.lang === 'ja_JP' || v.lang.startsWith('ja'));
-                    } else if (langCode === 'en-US') {
-                        // 尋找英語聲音
-                        targetVoice = voices.find(v => v.lang === 'en-US' || v.lang === 'en_US' || v.lang.startsWith('en'));
-                    }
+            // 將原本的 langCode 轉換為 Google Translate TTS 支援的語系代碼
+            let ttsLang = 'en';
+            if (langCode === 'zh-HK') ttsLang = 'yue';
+            else if (langCode === 'ja-JP') ttsLang = 'ja';
+            else if (langCode === 'en-US') ttsLang = 'en';
 
-                    // 如果系統中有找到對應的語音包，就強制綁定給它
-                    if (targetVoice) {
-                        utterance.voice = targetVoice;
-                    } else {
-                        console.warn('系統中找不到對應的專屬語音包，將使用預設發音:', langCode);
-                    }
-                }
-                
-                window.speechSynthesis.speak(utterance);
-            } else {
-                alert("你的瀏覽器不支援語音朗讀功能");
+            // 組合 Google 翻譯發音 API 的網址 (完全免費且免金鑰)
+            const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=${ttsLang}&q=${encodeURIComponent(textToSpeak)}`;
+            
+            // 停止前一個正在播放的聲音
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
             }
-        }
 
-        // 確保聲音庫載入
-        if (speechSynthesis.onvoiceschanged !== undefined) {
-          speechSynthesis.onvoiceschanged = function() {
-              window.speechSynthesis.getVoices();
-          };
+            // 使用 HTML5 Audio 播放。這會強制手機系統將其視為「媒體音訊 (Media)」
+            // 因此聲音會 100% 透過你連接的藍牙耳機或有線耳機輸出！
+            currentAudio = new Audio(url);
+            
+            currentAudio.play().catch(error => {
+                console.error('播放語音時發生錯誤:', error);
+                alert("播放失敗，請檢查網路連線或手機音量。");
+            });
         }
 
         // -------------------------------------------------------------------
