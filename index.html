@@ -215,8 +215,33 @@
                 window.speechSynthesis.cancel();
                 
                 const utterance = new SpeechSynthesisUtterance(textToSpeak);
-                utterance.lang = langCode; // 指定語言
+                utterance.lang = langCode; // 指定語言標籤
                 utterance.rate = 0.9;      // 稍微放慢語速讓發音更清楚
+                
+                // 【修復 Bug】手動從系統中尋找並強制綁定對應的語音包
+                // 否則某些手機/瀏覽器會無視 lang 標籤，直接用預設的普通話來唸
+                const voices = window.speechSynthesis.getVoices();
+                if (voices.length > 0) {
+                    let targetVoice = null;
+                    
+                    if (langCode === 'zh-HK') {
+                        // 嚴格尋找粵語/香港的專屬聲音
+                        targetVoice = voices.find(v => v.lang === 'zh-HK' || v.lang === 'zh_HK' || v.name.toLowerCase().includes('cantonese') || v.name.includes('香港') || v.name.includes('粵語'));
+                    } else if (langCode === 'ja-JP') {
+                        // 尋找日語的專屬聲音
+                        targetVoice = voices.find(v => v.lang === 'ja-JP' || v.lang === 'ja_JP' || v.lang.startsWith('ja'));
+                    } else if (langCode === 'en-US') {
+                        // 尋找英語聲音
+                        targetVoice = voices.find(v => v.lang === 'en-US' || v.lang === 'en_US' || v.lang.startsWith('en'));
+                    }
+
+                    // 如果系統中有找到對應的語音包，就強制綁定給它
+                    if (targetVoice) {
+                        utterance.voice = targetVoice;
+                    } else {
+                        console.warn('系統中找不到對應的專屬語音包，將使用預設發音:', langCode);
+                    }
+                }
                 
                 window.speechSynthesis.speak(utterance);
             } else {
