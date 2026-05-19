@@ -99,9 +99,8 @@
         const transcriptText = document.getElementById('transcriptText');
         const micRipple = document.getElementById('micRipple');
         
-        let ttsPlayer = null; // 改用持久化的 DOM Audio 元素，對 iOS 更友善
+        let ttsPlayer = null; // 純 HTML5 Audio 播放器
         let currentPlayingBtn = null;
-        let speechUnlocked = false; // 用來記錄是否已經解鎖了 iOS 的語音權限
         const defaultIconClass = 'fas fa-volume-up';
 
         // -------------------------------------------------------------------
@@ -161,16 +160,13 @@
                 micBtn.classList.add('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
                 micRipple.classList.add('animate-[ping_1.5s_cubic-bezier(0,0,0.2,1)_infinite]', 'opacity-75');
                 
-                // 停止所有播放
+                // 錄音時停止所有播放
                 if (ttsPlayer) {
                     ttsPlayer.pause();
                 }
                 if (currentPlayingBtn) {
                     currentPlayingBtn.querySelector('i').className = defaultIconClass;
                     currentPlayingBtn = null;
-                }
-                if ('speechSynthesis' in window) {
-                    window.speechSynthesis.cancel();
                 }
             };
 
@@ -221,7 +217,7 @@
         });
 
         // -------------------------------------------------------------------
-        // 4. 文字轉語音 (Text to Speech) - 終極穩定版
+        // 4. 文字轉語音 (Text to Speech) - 純淨 HTML5 媒體播放版
         // -------------------------------------------------------------------
         function speakText(btnElement, elementId, langCode) {
             const textToSpeak = document.getElementById(elementId).innerText;
@@ -229,23 +225,14 @@
 
             const icon = btnElement.querySelector('i');
 
-            // 終極修復 2：在使用者點擊的這一個「同步」瞬間，播放一段空白語音。
-            // 這能徹底解鎖 iOS Safari 的語音權限，即使等一下 Audio 失敗，fallback 也絕對能發出聲音！
-            if ('speechSynthesis' in window && !speechUnlocked) {
-                window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
-                speechUnlocked = true;
-            }
-
             // 停止前一個正在播放的聲音
             if (ttsPlayer) {
                 ttsPlayer.pause();
                 ttsPlayer.currentTime = 0;
             }
+            
             if (currentPlayingBtn && currentPlayingBtn !== btnElement) {
                 currentPlayingBtn.querySelector('i').className = defaultIconClass;
-            }
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
             }
 
             // 更新目前按鈕狀態為「載入中 (旋轉)」
@@ -257,13 +244,15 @@
             else if (langCode === 'ja-JP') ttsLang = 'ja';
             else if (langCode === 'en-US') ttsLang = 'en';
 
-            // 使用 translate.google.com endpoint
-            const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${ttsLang}&q=${encodeURIComponent(textToSpeak)}`;
+            // 使用最穩定的 gtx 客戶端，由於有 no-referrer，不會被 403 阻擋
+            const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=${ttsLang}&q=${encodeURIComponent(textToSpeak)}`;
             
-            // 建立或取得共用的 DOM Audio 元素 (這比 new Audio() 在 iOS 上更穩定)
+            // 建立或取得共用的 DOM Audio 元素
             if (!ttsPlayer) {
                 ttsPlayer = document.createElement('audio');
                 ttsPlayer.id = 'ttsPlayer';
+                // 加上 playsinline 屬性，確保在 iOS 上行為如同一般媒體
+                ttsPlayer.setAttribute('playsinline', '');
                 document.body.appendChild(ttsPlayer);
             }
             
@@ -285,45 +274,8 @@
                 console.warn('HTML5 Audio 播放失敗:', error);
                 icon.className = defaultIconClass;
                 currentPlayingBtn = null;
-                
-                // 啟動備用系統語音引擎 (已經移除了所有 alert，實現安靜無縫切換)
-                fallbackToSystemSpeech(textToSpeak, langCode);
+                alert("播放失敗：請確保手機未處於靜音模式，並調高媒體音量。");
             });
-        }
-
-        // 備用方案：使用系統內建引擎發音
-        function fallbackToSystemSpeech(text, langCode) {
-            if (!('speechSynthesis' in window)) return;
-            
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = langCode; 
-            utterance.rate = 0.9;      
-            
-            const voices = window.speechSynthesis.getVoices();
-            if (voices.length > 0) {
-                let targetVoice = null;
-                
-                if (langCode === 'zh-HK') {
-                    targetVoice = voices.find(v => v.lang === 'zh-HK' || v.lang === 'zh_HK' || v.name.toLowerCase().includes('cantonese') || v.name.includes('香港') || v.name.includes('粵語'));
-                } else if (langCode === 'ja-JP') {
-                    targetVoice = voices.find(v => v.lang === 'ja-JP' || v.lang === 'ja_JP' || v.lang.startsWith('ja'));
-                } else if (langCode === 'en-US') {
-                    targetVoice = voices.find(v => v.lang === 'en-US' || v.lang === 'en_US' || v.lang.startsWith('en'));
-                }
-
-                if (targetVoice) {
-                    utterance.voice = targetVoice;
-                }
-            }
-            
-            window.speechSynthesis.speak(utterance);
-        }
-
-        // 確保聲音庫載入
-        if (speechSynthesis.onvoiceschanged !== undefined) {
-          speechSynthesis.onvoiceschanged = function() {
-              window.speechSynthesis.getVoices();
-          };
         }
 
         // -------------------------------------------------------------------
