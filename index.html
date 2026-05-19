@@ -101,6 +101,7 @@
         
         let ttsPlayer = null; // 純 HTML5 Audio 播放器
         let currentPlayingBtn = null;
+        let audioCtx = null; // 用於重置 iOS 音訊通道的 Web Audio API Context
         const defaultIconClass = 'fas fa-volume-up';
 
         // -------------------------------------------------------------------
@@ -217,18 +218,50 @@
         });
 
         // -------------------------------------------------------------------
-        // 4. 文字轉語音 (Text to Speech) - 純淨 HTML5 媒體播放版
+        // 4. 文字轉語音 (Text to Speech) - 解決 iOS 耳機通道 Bug 的終極版
         // -------------------------------------------------------------------
+        
+        // 絕招：利用 Web Audio API 發送極短靜音，強迫 iOS 重置音訊硬體通道 (回到耳機)
+        function unlockAudioSession() {
+            try {
+                if (!audioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    audioCtx = new AudioContext();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const buffer = audioCtx.createBuffer(1, 1, 22050);
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtx.destination);
+                source.start(0);
+            } catch (e) {
+                console.warn("AudioContext 重置失敗:", e);
+            }
+        }
+
         function speakText(btnElement, elementId, langCode) {
             const textToSpeak = document.getElementById(elementId).innerText;
             if (!textToSpeak || textToSpeak.includes("翻譯中") || textToSpeak.includes("等待翻譯")) return;
 
+            // 【關鍵修復 1】：如果麥克風還在運作中，強制停止它。
+            // 因為 iOS 只要發現麥克風開著，就會強制把聲音推到外放喇叭或聽筒！
+            if (isRecording && recognition) {
+                recognition.stop();
+                resetMicUI();
+            }
+
+            // 【關鍵修復 2】：發送靜音脈衝，敲醒 iOS 的音訊通道，告訴它現在要播媒體了，快切回耳機！
+            unlockAudioSession();
+
             const icon = btnElement.querySelector('i');
 
-            // 停止前一個正在播放的聲音
+            // 【關鍵修復 3】：動態銷毀舊的播放器。不要重複使用，避免 iOS 記住上次錯誤的輸出路徑。
             if (ttsPlayer) {
                 ttsPlayer.pause();
-                ttsPlayer.currentTime = 0;
+                ttsPlayer.src = ''; 
+                ttsPlayer = null;
             }
             
             if (currentPlayingBtn && currentPlayingBtn !== btnElement) {
@@ -244,19 +277,11 @@
             else if (langCode === 'ja-JP') ttsLang = 'ja';
             else if (langCode === 'en-US') ttsLang = 'en';
 
-            // 使用最穩定的 gtx 客戶端，由於有 no-referrer，不會被 403 阻擋
             const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=${ttsLang}&q=${encodeURIComponent(textToSpeak)}`;
             
-            // 建立或取得共用的 DOM Audio 元素
-            if (!ttsPlayer) {
-                ttsPlayer = document.createElement('audio');
-                ttsPlayer.id = 'ttsPlayer';
-                // 加上 playsinline 屬性，確保在 iOS 上行為如同一般媒體
-                ttsPlayer.setAttribute('playsinline', '');
-                document.body.appendChild(ttsPlayer);
-            }
-            
-            ttsPlayer.src = url;
+            // 建立全新的 Audio 元素
+            ttsPlayer = new Audio(url);
+            ttsPlayer.setAttribute('playsinline', '');
             
             // 當音訊成功開始播放時，切換為「閃爍脈衝」效果
             ttsPlayer.onplay = () => {
