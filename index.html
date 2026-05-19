@@ -163,6 +163,9 @@
                 if (currentAudio) {
                     currentAudio.pause();
                 }
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
+                }
             };
 
             recognition.onresult = function(event) {
@@ -212,11 +215,20 @@
         });
 
         // -------------------------------------------------------------------
-        // 4. 文字轉語音 (Text to Speech) - 使用 HTML5 Audio 解決耳機播放問題
+        // 4. 文字轉語音 (Text to Speech) - 雙重保險設計
         // -------------------------------------------------------------------
         function speakText(elementId, langCode) {
             const textToSpeak = document.getElementById(elementId).innerText;
             if (!textToSpeak || textToSpeak.includes("翻譯中") || textToSpeak.includes("等待翻譯")) return;
+
+            // 停止所有正在播放的聲音
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+            }
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
 
             // 將原本的 langCode 轉換為 Google Translate TTS 支援的語系代碼
             let ttsLang = 'en';
@@ -224,23 +236,52 @@
             else if (langCode === 'ja-JP') ttsLang = 'ja';
             else if (langCode === 'en-US') ttsLang = 'en';
 
-            // 組合 Google 翻譯發音 API 的網址 (完全免費且免金鑰)
-            const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=${ttsLang}&q=${encodeURIComponent(textToSpeak)}`;
+            // 方案一：使用 HTML5 Audio (能順利從耳機播放，改用更穩定的 tw-ob 客戶端)
+            const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${ttsLang}&q=${encodeURIComponent(textToSpeak)}`;
             
-            // 停止前一個正在播放的聲音
-            if (currentAudio) {
-                currentAudio.pause();
-                currentAudio.currentTime = 0;
-            }
-
-            // 使用 HTML5 Audio 播放。這會強制手機系統將其視為「媒體音訊 (Media)」
-            // 因此聲音會 100% 透過你連接的藍牙耳機或有線耳機輸出！
             currentAudio = new Audio(url);
             
+            // 嘗試播放 Audio
             currentAudio.play().catch(error => {
-                console.error('播放語音時發生錯誤:', error);
-                alert("播放失敗，請檢查網路連線或手機音量。");
+                console.warn('HTML5 Audio 播放失敗，啟動備用系統語音引擎:', error);
+                // 方案二：如果被 iOS 阻擋或網路失敗，瞬間無縫切換到系統內建語音 (Fallback)
+                fallbackToSystemSpeech(textToSpeak, langCode);
             });
+        }
+
+        // 備用方案：使用系統內建引擎發音 (已包含修復錯誤口音的邏輯)
+        function fallbackToSystemSpeech(text, langCode) {
+            if (!('speechSynthesis' in window)) return;
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = langCode; 
+            utterance.rate = 0.9;      
+            
+            const voices = window.speechSynthesis.getVoices();
+            if (voices.length > 0) {
+                let targetVoice = null;
+                
+                if (langCode === 'zh-HK') {
+                    targetVoice = voices.find(v => v.lang === 'zh-HK' || v.lang === 'zh_HK' || v.name.toLowerCase().includes('cantonese') || v.name.includes('香港') || v.name.includes('粵語'));
+                } else if (langCode === 'ja-JP') {
+                    targetVoice = voices.find(v => v.lang === 'ja-JP' || v.lang === 'ja_JP' || v.lang.startsWith('ja'));
+                } else if (langCode === 'en-US') {
+                    targetVoice = voices.find(v => v.lang === 'en-US' || v.lang === 'en_US' || v.lang.startsWith('en'));
+                }
+
+                if (targetVoice) {
+                    utterance.voice = targetVoice;
+                }
+            }
+            
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // 確保聲音庫載入 (供備用方案使用)
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+          speechSynthesis.onvoiceschanged = function() {
+              window.speechSynthesis.getVoices();
+          };
         }
 
         // -------------------------------------------------------------------
