@@ -1,0 +1,75 @@
+<!-- ... existing code ... -->
+        // 狀態變數
+        let isRecording = false;
+
+        // -------------------------------------------------------------------
+        // 2. 翻譯邏輯 (使用 Gemini API)
+        // -------------------------------------------------------------------
+        
+        async function translateText(text) {
+            const yueTextEl = document.getElementById('yueText');
+            const enTextEl = document.getElementById('enText');
+            const jaTextEl = document.getElementById('jaText');
+
+            // 顯示翻譯中的載入狀態
+            yueTextEl.innerText = "翻譯中 (Translating)...";
+            enTextEl.innerText = "翻譯中 (Translating)...";
+            jaTextEl.innerText = "翻譯中 (Translating)...";
+
+            // 構建給 Gemini 的 Prompt (提示詞)
+            const prompt = `請將以下中文文本翻譯成粵語、英語和日語。待翻譯文本："${text}"`;
+
+            // 設定 API 請求參數，並強制要求回傳 JSON 格式
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            "cantonese": { type: "STRING", description: "粵語翻譯結果" },
+                            "english": { type: "STRING", description: "英語翻譯結果" },
+                            "japanese": { type: "STRING", description: "日語翻譯結果" }
+                        },
+                        required: ["cantonese", "english", "japanese"]
+                    }
+                }
+            };
+
+            // Canvas 平台會自動在執行時注入 API Key，此處保持空字串即可
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+            try {
+                // 呼叫 Gemini API
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                
+                // 解析回傳的 JSON 並更新到畫面上
+                if (result.candidates && result.candidates.length > 0) {
+                    const jsonStr = result.candidates[0].content.parts[0].text;
+                    const translations = JSON.parse(jsonStr);
+
+                    yueTextEl.innerText = translations.cantonese;
+                    enTextEl.innerText = translations.english;
+                    jaTextEl.innerText = translations.japanese;
+                } else {
+                    throw new Error("無法解析 Gemini API 的回應");
+                }
+            } catch (error) {
+                console.error("翻譯請求發生錯誤:", error);
+                yueTextEl.innerText = "翻譯失敗，請重試。";
+                enTextEl.innerText = "Translation failed.";
+                jaTextEl.innerText = "翻訳に失敗しました。";
+            }
+        }
+
+        // -------------------------------------------------------------------
+        // 3. 語音辨識 (Speech to Text) 設定
+        // -------------------------------------------------------------------
+<!-- ... existing code ... -->
