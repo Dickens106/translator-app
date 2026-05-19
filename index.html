@@ -53,7 +53,7 @@
             <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 relative group">
                 <div class="flex justify-between items-center mb-2">
                     <span class="text-xs font-bold text-blue-600 bg-blue-200 px-2 py-1 rounded-md">粵語 (Cantonese)</span>
-                    <button onclick="speakText('yueText', 'zh-HK')" class="text-blue-500 hover:text-blue-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-blue-200 transition-colors">
+                    <button onclick="speakText(this, 'yueText', 'zh-HK')" class="text-blue-500 hover:text-blue-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-blue-200 transition-colors">
                         <i class="fas fa-volume-up"></i>
                     </button>
                 </div>
@@ -64,7 +64,7 @@
             <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 relative group">
                 <div class="flex justify-between items-center mb-2">
                     <span class="text-xs font-bold text-indigo-600 bg-indigo-200 px-2 py-1 rounded-md">英語 (English)</span>
-                    <button onclick="speakText('enText', 'en-US')" class="text-indigo-500 hover:text-indigo-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-indigo-200 transition-colors">
+                    <button onclick="speakText(this, 'enText', 'en-US')" class="text-indigo-500 hover:text-indigo-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-indigo-200 transition-colors">
                         <i class="fas fa-volume-up"></i>
                     </button>
                 </div>
@@ -75,7 +75,7 @@
             <div class="bg-purple-50 p-4 rounded-xl border border-purple-100 relative group">
                 <div class="flex justify-between items-center mb-2">
                     <span class="text-xs font-bold text-purple-600 bg-purple-200 px-2 py-1 rounded-md">日語 (Japanese)</span>
-                    <button onclick="speakText('jaText', 'ja-JP')" class="text-purple-500 hover:text-purple-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-purple-200 transition-colors">
+                    <button onclick="speakText(this, 'jaText', 'ja-JP')" class="text-purple-500 hover:text-purple-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-purple-200 transition-colors">
                         <i class="fas fa-volume-up"></i>
                     </button>
                 </div>
@@ -99,6 +99,8 @@
         
         // 全域 Audio 物件，用來避免同時播放多個聲音
         let currentAudio = null;
+        let currentPlayingBtn = null; // 追蹤目前正在播放的按鈕
+        const defaultIconClass = 'fas fa-volume-up';
 
         // -------------------------------------------------------------------
         // 2. 翻譯邏輯 (使用 Google Translate 公開 API，免 Key 免 VPN)
@@ -113,7 +115,6 @@
             jaTextEl.innerText = "翻譯中 (Translating)...";
 
             try {
-                // 定義一個呼叫 Google Translate Web API 的輔助函式
                 const fetchTranslation = async (targetLang) => {
                     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
                     const response = await fetch(url);
@@ -121,7 +122,6 @@
                     return data[0][0][0];
                 };
 
-                // 同時發送三個語言的翻譯請求
                 const [cantonese, english, japanese] = await Promise.all([
                     fetchTranslation('yue'),
                     fetchTranslation('en'),
@@ -148,7 +148,7 @@
 
         if (SpeechRecognition) {
             recognition = new SpeechRecognition();
-            recognition.lang = 'zh-CN'; // 設定輸入為普通話
+            recognition.lang = 'zh-CN'; 
             recognition.interimResults = false;
             recognition.maxAlternatives = 1;
 
@@ -159,9 +159,13 @@
                 micBtn.classList.add('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
                 micRipple.classList.add('animate-[ping_1.5s_cubic-bezier(0,0,0.2,1)_infinite]', 'opacity-75');
                 
-                // 如果正在播放聲音，按麥克風時自動停止播放
+                // 停止所有播放
                 if (currentAudio) {
                     currentAudio.pause();
+                }
+                if (currentPlayingBtn) {
+                    currentPlayingBtn.querySelector('i').className = defaultIconClass;
+                    currentPlayingBtn = null;
                 }
                 if ('speechSynthesis' in window) {
                     window.speechSynthesis.cancel();
@@ -172,7 +176,7 @@
                 const transcript = event.results[0][0].transcript;
                 transcriptBox.classList.remove('hidden');
                 transcriptText.innerText = `「${transcript}」`;
-                translateText(transcript); // 呼叫翻譯
+                translateText(transcript); 
             };
 
             recognition.onerror = function(event) {
@@ -215,41 +219,66 @@
         });
 
         // -------------------------------------------------------------------
-        // 4. 文字轉語音 (Text to Speech) - 雙重保險設計
+        // 4. 文字轉語音 (Text to Speech) - 加入視覺化載入與播放狀態
         // -------------------------------------------------------------------
-        function speakText(elementId, langCode) {
+        function speakText(btnElement, elementId, langCode) {
             const textToSpeak = document.getElementById(elementId).innerText;
             if (!textToSpeak || textToSpeak.includes("翻譯中") || textToSpeak.includes("等待翻譯")) return;
 
-            // 停止所有正在播放的聲音
+            const icon = btnElement.querySelector('i');
+
+            // 停止前一個正在播放的聲音，並重置其圖示
             if (currentAudio) {
                 currentAudio.pause();
                 currentAudio.currentTime = 0;
+            }
+            if (currentPlayingBtn && currentPlayingBtn !== btnElement) {
+                currentPlayingBtn.querySelector('i').className = defaultIconClass;
             }
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
             }
 
-            // 將原本的 langCode 轉換為 Google Translate TTS 支援的語系代碼
+            // 更新目前按鈕狀態為「載入中 (旋轉)」
+            currentPlayingBtn = btnElement;
+            icon.className = 'fas fa-spinner fa-spin text-blue-500';
+
             let ttsLang = 'en';
             if (langCode === 'zh-HK') ttsLang = 'yue';
             else if (langCode === 'ja-JP') ttsLang = 'ja';
             else if (langCode === 'en-US') ttsLang = 'en';
 
-            // 方案一：使用 HTML5 Audio (能順利從耳機播放，改用更穩定的 tw-ob 客戶端)
-            const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${ttsLang}&q=${encodeURIComponent(textToSpeak)}`;
+            // 使用更穩健的 dict-chrome-ex 參數
+            const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=dict-chrome-ex&tl=${ttsLang}&q=${encodeURIComponent(textToSpeak)}`;
             
             currentAudio = new Audio(url);
             
+            // 當音訊成功開始播放時，切換為「閃爍脈衝」效果
+            currentAudio.onplay = () => {
+                icon.className = 'fas fa-volume-up animate-pulse text-blue-600';
+            };
+
+            // 播放結束時，重置圖示
+            currentAudio.onended = () => {
+                icon.className = defaultIconClass;
+                currentPlayingBtn = null;
+            };
+
             // 嘗試播放 Audio
             currentAudio.play().catch(error => {
-                console.warn('HTML5 Audio 播放失敗，啟動備用系統語音引擎:', error);
-                // 方案二：如果被 iOS 阻擋或網路失敗，瞬間無縫切換到系統內建語音 (Fallback)
+                console.warn('HTML5 Audio 播放失敗:', error);
+                icon.className = defaultIconClass; // 發生錯誤立刻恢復原狀
+                currentPlayingBtn = null;
+                
+                // 啟動備用系統語音引擎 (靜音模式下此備用方案通常能出聲，但耳機可能無法收聽)
                 fallbackToSystemSpeech(textToSpeak, langCode);
+                
+                // 跳出詳細檢查提示
+                alert("播放受到限制。如果聽不到聲音，請檢查：\n\n1. 手機左側的「靜音開關」是否已經撥到正常模式。\n2. 點擊喇叭時，調高手機的「媒體音量」。");
             });
         }
 
-        // 備用方案：使用系統內建引擎發音 (已包含修復錯誤口音的邏輯)
+        // 備用方案：使用系統內建引擎發音
         function fallbackToSystemSpeech(text, langCode) {
             if (!('speechSynthesis' in window)) return;
             
