@@ -1,69 +1,137 @@
-<!-- ... existing code ... -->
-        // 狀態變數
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>多語系語音翻譯小助手</title>
+    
+    <!-- PWA Meta Tags -->
+    <link id="manifest" rel="manifest">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="翻譯助手">
+    <!-- 產生的 APP 圖示 -->
+    <link rel="apple-touch-icon" href="data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22192%22%20height%3D%22192%22%20viewBox%3D%220%200%20192%20192%22%3E%3Crect%20width%3D%22192%22%20height%3D%22192%22%20fill%3D%22%233b82f6%22%2F%3E%3Ctext%20x%3D%2296%22%20y%3D%22125%22%20font-family%3D%22sans-serif%22%20font-size%3D%2280%22%20text-anchor%3D%22middle%22%20fill%3D%22white%22%3E%E8%AD%AF%3C%2Ftext%3E%3C%2Fsvg%3E">
+
+    <!-- 引入 Tailwind CSS 進行快速且美觀的樣式設計 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 FontAwesome 圖示 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 flex items-center justify-center min-h-screen p-4 font-sans">
+
+    <div class="bg-white rounded-3xl shadow-xl p-6 md:p-8 w-full max-w-md relative overflow-hidden">
+        
+        <!-- 安裝 App 按鈕 -->
+        <button id="installBtn" class="hidden absolute top-3 right-3 bg-blue-100 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-full shadow-sm hover:bg-blue-200 transition-colors z-10 cursor-pointer">
+            <i class="fas fa-download mr-1"></i>安裝 App
+        </button>
+
+        <!-- 頂部裝飾條 -->
+        <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-500"></div>
+
+        <h1 class="text-2xl font-bold text-gray-800 text-center mb-6 mt-2">
+            <i class="fas fa-language text-blue-500 mr-2"></i>語音翻譯助手
+        </h1>
+
+        <!-- 語音輸入區 -->
+        <div class="flex flex-col items-center mb-8">
+            <button id="micBtn" class="w-20 h-20 bg-blue-500 text-white rounded-full flex items-center justify-center text-3xl shadow-lg hover:bg-blue-600 transition-all focus:outline-none focus:ring-4 focus:ring-blue-200 relative">
+                <i class="fas fa-microphone"></i>
+                <div id="micRipple" class="absolute inset-0 rounded-full border-4 border-blue-400 opacity-0 scale-100"></div>
+            </button>
+            <p id="statusText" class="text-gray-500 mt-4 font-medium">點擊麥克風開始說話 (普通話)</p>
+            <div id="transcriptBox" class="mt-4 p-4 bg-gray-100 rounded-xl w-full min-h-[60px] text-gray-700 text-center border border-gray-200 hidden">
+                <span id="transcriptText">...</span>
+            </div>
+        </div>
+
+        <!-- 翻譯結果區 -->
+        <div class="space-y-4">
+            <!-- 粵語 -->
+            <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 relative group">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-blue-600 bg-blue-200 px-2 py-1 rounded-md">粵語 (Cantonese)</span>
+                    <button onclick="speakText('yueText', 'zh-HK')" class="text-blue-500 hover:text-blue-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-blue-200 transition-colors">
+                        <i class="fas fa-volume-up"></i>
+                    </button>
+                </div>
+                <p id="yueText" class="text-gray-800 font-medium">等待翻譯...</p>
+            </div>
+
+            <!-- 英語 -->
+            <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 relative group">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-indigo-600 bg-indigo-200 px-2 py-1 rounded-md">英語 (English)</span>
+                    <button onclick="speakText('enText', 'en-US')" class="text-indigo-500 hover:text-indigo-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-indigo-200 transition-colors">
+                        <i class="fas fa-volume-up"></i>
+                    </button>
+                </div>
+                <p id="enText" class="text-gray-800 font-medium">Waiting for translation...</p>
+            </div>
+
+            <!-- 日語 -->
+            <div class="bg-purple-50 p-4 rounded-xl border border-purple-100 relative group">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-purple-600 bg-purple-200 px-2 py-1 rounded-md">日語 (Japanese)</span>
+                    <button onclick="speakText('jaText', 'ja-JP')" class="text-purple-500 hover:text-purple-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-purple-200 transition-colors">
+                        <i class="fas fa-volume-up"></i>
+                    </button>
+                </div>
+                <p id="jaText" class="text-gray-800 font-medium">翻訳待ち...</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 內部邏輯 -->
+    <script>
+        // -------------------------------------------------------------------
+        // 1. 狀態與 UI 變數
+        // -------------------------------------------------------------------
         let isRecording = false;
+        const micBtn = document.getElementById('micBtn');
+        const statusText = document.getElementById('statusText');
+        const transcriptBox = document.getElementById('transcriptBox');
+        const transcriptText = document.getElementById('transcriptText');
+        const micRipple = document.getElementById('micRipple');
 
         // -------------------------------------------------------------------
-        // 2. 翻譯邏輯 (使用 Gemini API)
+        // 2. 翻譯邏輯 (使用 Google Translate 公開 API，免 Key 免 VPN)
         // -------------------------------------------------------------------
-        
         async function translateText(text) {
             const yueTextEl = document.getElementById('yueText');
             const enTextEl = document.getElementById('enText');
             const jaTextEl = document.getElementById('jaText');
 
-            // 顯示翻譯中的載入狀態
             yueTextEl.innerText = "翻譯中 (Translating)...";
             enTextEl.innerText = "翻譯中 (Translating)...";
             jaTextEl.innerText = "翻譯中 (Translating)...";
 
-            // 構建給 Gemini 的 Prompt (提示詞)
-            const prompt = `請將以下中文文本翻譯成粵語、英語和日語。待翻譯文本："${text}"`;
-
-            // 設定 API 請求參數，並強制要求回傳 JSON 格式
-            const payload = {
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: "OBJECT",
-                        properties: {
-                            "cantonese": { type: "STRING", description: "粵語翻譯結果" },
-                            "english": { type: "STRING", description: "英語翻譯結果" },
-                            "japanese": { type: "STRING", description: "日語翻譯結果" }
-                        },
-                        required: ["cantonese", "english", "japanese"]
-                    }
-                }
-            };
-
-            // Canvas 平台會自動在執行時注入 API Key，此處保持空字串即可
-            const apiKey = ""; 
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-
             try {
-                // 呼叫 Gemini API
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+                // 定義一個呼叫 Google Translate Web API 的輔助函式
+                const fetchTranslation = async (targetLang) => {
+                    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    return data[0][0][0];
+                };
 
-                const result = await response.json();
-                
-                // 解析回傳的 JSON 並更新到畫面上
-                if (result.candidates && result.candidates.length > 0) {
-                    const jsonStr = result.candidates[0].content.parts[0].text;
-                    const translations = JSON.parse(jsonStr);
+                // 同時發送三個語言的翻譯請求
+                const [cantonese, english, japanese] = await Promise.all([
+                    fetchTranslation('yue'),
+                    fetchTranslation('en'),
+                    fetchTranslation('ja')
+                ]);
 
-                    yueTextEl.innerText = translations.cantonese;
-                    enTextEl.innerText = translations.english;
-                    jaTextEl.innerText = translations.japanese;
-                } else {
-                    throw new Error("無法解析 Gemini API 的回應");
-                }
+                yueTextEl.innerText = cantonese;
+                enTextEl.innerText = english;
+                jaTextEl.innerText = japanese;
+
             } catch (error) {
                 console.error("翻譯請求發生錯誤:", error);
-                yueTextEl.innerText = "翻譯失敗，請重試。";
+                yueTextEl.innerText = "翻譯失敗，請檢查網路。";
                 enTextEl.innerText = "Translation failed.";
                 jaTextEl.innerText = "翻訳に失敗しました。";
             }
@@ -72,4 +140,148 @@
         // -------------------------------------------------------------------
         // 3. 語音辨識 (Speech to Text) 設定
         // -------------------------------------------------------------------
-<!-- ... existing code ... -->
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.lang = 'zh-CN'; // 設定輸入為普通話
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = function() {
+                isRecording = true;
+                statusText.innerText = "正在聆聽...";
+                micBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+                micBtn.classList.add('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
+                micRipple.classList.add('animate-[ping_1.5s_cubic-bezier(0,0,0.2,1)_infinite]', 'opacity-75');
+            };
+
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                transcriptBox.classList.remove('hidden');
+                transcriptText.innerText = `「${transcript}」`;
+                translateText(transcript); // 呼叫翻譯
+            };
+
+            recognition.onerror = function(event) {
+                console.error('語音辨識錯誤:', event.error);
+                if (event.error === 'not-allowed') {
+                    statusText.innerText = "請允許使用麥克風權限";
+                    statusText.classList.add('text-red-500');
+                } else {
+                    statusText.innerText = "辨識失敗，請再試一次";
+                }
+                resetMicUI();
+            };
+
+            recognition.onend = function() {
+                resetMicUI();
+            };
+        } else {
+            statusText.innerText = "你的瀏覽器不支援語音辨識功能";
+            micBtn.disabled = true;
+            micBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+
+        function resetMicUI() {
+            isRecording = false;
+            if(!statusText.classList.contains('text-red-500')) {
+                statusText.innerText = "點擊麥克風開始說話 (普通話)";
+            }
+            micBtn.classList.remove('bg-red-500', 'hover:bg-red-600', 'animate-pulse');
+            micBtn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+            micRipple.classList.remove('animate-[ping_1.5s_cubic-bezier(0,0,0.2,1)_infinite]', 'opacity-75');
+        }
+
+        micBtn.addEventListener('click', () => {
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                statusText.classList.remove('text-red-500');
+                recognition.start();
+            }
+        });
+
+        // -------------------------------------------------------------------
+        // 4. 文字轉語音 (Text to Speech) 設定
+        // -------------------------------------------------------------------
+        function speakText(elementId, langCode) {
+            const textToSpeak = document.getElementById(elementId).innerText;
+            if (!textToSpeak || textToSpeak.includes("翻譯中") || textToSpeak.includes("等待翻譯")) return;
+
+            if ('speechSynthesis' in window) {
+                // 停止目前的朗讀
+                window.speechSynthesis.cancel();
+                
+                const utterance = new SpeechSynthesisUtterance(textToSpeak);
+                utterance.lang = langCode; // 指定語言
+                utterance.rate = 0.9;      // 稍微放慢語速讓發音更清楚
+                
+                window.speechSynthesis.speak(utterance);
+            } else {
+                alert("你的瀏覽器不支援語音朗讀功能");
+            }
+        }
+
+        // 確保聲音庫載入
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+          speechSynthesis.onvoiceschanged = function() {
+              window.speechSynthesis.getVoices();
+          };
+        }
+
+        // -------------------------------------------------------------------
+        // 5. PWA (漸進式網頁應用) 設定
+        // -------------------------------------------------------------------
+        const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192"><rect width="192" height="192" fill="#3b82f6"/><text x="96" y="125" font-family="sans-serif" font-size="80" text-anchor="middle" fill="white">譯</text></svg>`;
+        const iconDataUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(iconSvg);
+        
+        const manifest = {
+            name: "多語系語音翻譯",
+            short_name: "翻譯助手",
+            display: "standalone",
+            start_url: location.href,
+            theme_color: "#3b82f6",
+            background_color: "#fdfbfb",
+            icons: [{ src: iconDataUrl, sizes: "192x192", type: "image/svg+xml", purpose: "any maskable" }]
+        };
+        
+        const manifestBlob = new Blob([JSON.stringify(manifest)], { type: "application/json" });
+        document.getElementById("manifest").href = URL.createObjectURL(manifestBlob);
+
+        // 註冊 Service Worker
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                self.addEventListener('install', (e) => self.skipWaiting());
+                self.addEventListener('activate', (e) => self.clients.claim());
+                self.addEventListener('fetch', (e) => {});
+            `;
+            const swBlob = new Blob([swCode], { type: 'application/javascript' });
+            navigator.serviceWorker.register(URL.createObjectURL(swBlob))
+                .catch(err => console.log('SW 註冊被限制:', err));
+        }
+
+        // 處理安裝按鈕顯示
+        let deferredPrompt;
+        const installBtn = document.getElementById('installBtn');
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installBtn.classList.remove('hidden');
+        });
+
+        installBtn.addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    installBtn.classList.add('hidden');
+                }
+                deferredPrompt = null;
+            }
+        });
+    </script>
+</body>
+</html>
