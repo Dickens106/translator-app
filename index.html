@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- 終極修復 1：這行 meta 標籤可以防止 Google TTS 阻擋跨域請求，保證音訊能順利下載 -->
+    <meta name="referrer" content="no-referrer">
     <title>多語系語音翻譯小助手</title>
     
     <!-- PWA Meta Tags -->
@@ -97,9 +99,9 @@
         const transcriptText = document.getElementById('transcriptText');
         const micRipple = document.getElementById('micRipple');
         
-        // 全域 Audio 物件，用來避免同時播放多個聲音
-        let currentAudio = null;
-        let currentPlayingBtn = null; // 追蹤目前正在播放的按鈕
+        let ttsPlayer = null; // 改用持久化的 DOM Audio 元素，對 iOS 更友善
+        let currentPlayingBtn = null;
+        let speechUnlocked = false; // 用來記錄是否已經解鎖了 iOS 的語音權限
         const defaultIconClass = 'fas fa-volume-up';
 
         // -------------------------------------------------------------------
@@ -160,8 +162,8 @@
                 micRipple.classList.add('animate-[ping_1.5s_cubic-bezier(0,0,0.2,1)_infinite]', 'opacity-75');
                 
                 // 停止所有播放
-                if (currentAudio) {
-                    currentAudio.pause();
+                if (ttsPlayer) {
+                    ttsPlayer.pause();
                 }
                 if (currentPlayingBtn) {
                     currentPlayingBtn.querySelector('i').className = defaultIconClass;
@@ -219,7 +221,7 @@
         });
 
         // -------------------------------------------------------------------
-        // 4. 文字轉語音 (Text to Speech) - 加入視覺化載入與播放狀態
+        // 4. 文字轉語音 (Text to Speech) - 終極穩定版
         // -------------------------------------------------------------------
         function speakText(btnElement, elementId, langCode) {
             const textToSpeak = document.getElementById(elementId).innerText;
@@ -227,10 +229,17 @@
 
             const icon = btnElement.querySelector('i');
 
-            // 停止前一個正在播放的聲音，並重置其圖示
-            if (currentAudio) {
-                currentAudio.pause();
-                currentAudio.currentTime = 0;
+            // 終極修復 2：在使用者點擊的這一個「同步」瞬間，播放一段空白語音。
+            // 這能徹底解鎖 iOS Safari 的語音權限，即使等一下 Audio 失敗，fallback 也絕對能發出聲音！
+            if ('speechSynthesis' in window && !speechUnlocked) {
+                window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+                speechUnlocked = true;
+            }
+
+            // 停止前一個正在播放的聲音
+            if (ttsPlayer) {
+                ttsPlayer.pause();
+                ttsPlayer.currentTime = 0;
             }
             if (currentPlayingBtn && currentPlayingBtn !== btnElement) {
                 currentPlayingBtn.querySelector('i').className = defaultIconClass;
@@ -248,33 +257,37 @@
             else if (langCode === 'ja-JP') ttsLang = 'ja';
             else if (langCode === 'en-US') ttsLang = 'en';
 
-            // 使用更穩健的 dict-chrome-ex 參數
-            const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=dict-chrome-ex&tl=${ttsLang}&q=${encodeURIComponent(textToSpeak)}`;
+            // 使用 translate.google.com endpoint
+            const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${ttsLang}&q=${encodeURIComponent(textToSpeak)}`;
             
-            currentAudio = new Audio(url);
+            // 建立或取得共用的 DOM Audio 元素 (這比 new Audio() 在 iOS 上更穩定)
+            if (!ttsPlayer) {
+                ttsPlayer = document.createElement('audio');
+                ttsPlayer.id = 'ttsPlayer';
+                document.body.appendChild(ttsPlayer);
+            }
+            
+            ttsPlayer.src = url;
             
             // 當音訊成功開始播放時，切換為「閃爍脈衝」效果
-            currentAudio.onplay = () => {
+            ttsPlayer.onplay = () => {
                 icon.className = 'fas fa-volume-up animate-pulse text-blue-600';
             };
 
             // 播放結束時，重置圖示
-            currentAudio.onended = () => {
+            ttsPlayer.onended = () => {
                 icon.className = defaultIconClass;
                 currentPlayingBtn = null;
             };
 
             // 嘗試播放 Audio
-            currentAudio.play().catch(error => {
+            ttsPlayer.play().catch(error => {
                 console.warn('HTML5 Audio 播放失敗:', error);
-                icon.className = defaultIconClass; // 發生錯誤立刻恢復原狀
+                icon.className = defaultIconClass;
                 currentPlayingBtn = null;
                 
-                // 啟動備用系統語音引擎 (靜音模式下此備用方案通常能出聲，但耳機可能無法收聽)
+                // 啟動備用系統語音引擎 (已經移除了所有 alert，實現安靜無縫切換)
                 fallbackToSystemSpeech(textToSpeak, langCode);
-                
-                // 跳出詳細檢查提示
-                alert("播放受到限制。如果聽不到聲音，請檢查：\n\n1. 手機左側的「靜音開關」是否已經撥到正常模式。\n2. 點擊喇叭時，調高手機的「媒體音量」。");
             });
         }
 
@@ -306,7 +319,7 @@
             window.speechSynthesis.speak(utterance);
         }
 
-        // 確保聲音庫載入 (供備用方案使用)
+        // 確保聲音庫載入
         if (speechSynthesis.onvoiceschanged !== undefined) {
           speechSynthesis.onvoiceschanged = function() {
               window.speechSynthesis.getVoices();
